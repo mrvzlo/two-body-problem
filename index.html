@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+   <head>
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <title>Three-Body Problem Animation</title>
+      <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+      <style>
+         body {
+            margin: 0;
+            overflow: hidden;
+         }
+         div {
+            width: 30vw;
+            height: 200px;
+            position: fixed;
+         }
+         .b {
+            left: 30vw;
+         }
+         .c {
+            left: 60vw;
+         }
+         #rangeValue {
+            width: 40px;
+            display: inline-block;
+         }
+      </style>
+   </head>
+   <body>
+      <div>
+         <canvas id="chartA"></canvas>
+      </div>
+      <div class="b">
+         <canvas id="chartB"></canvas>
+      </div>
+      <div class="c">
+         <br />
+         Reload simulation with different velocity <br />
+
+         <span id="rangeValue"></span>
+         <input type="range" value="1" min="0" max="2" step="0.001" id="velocity" />
+         <button onclick="reload()">Reload</button>
+      </div>
+      <script>
+         let bodies = [];
+         let G = 400; // Gravitational constant
+         let step = 0;
+         let rChart;
+         let vChart;
+         let totalR = [];
+         let totalV = [];
+         let stop = false;
+
+         class Body {
+            constructor(mass, x, y) {
+               this.mass = mass;
+               this.pos = createVector(x, y);
+               this.vel = createVector(0, 0);
+            }
+
+            applyForce(force) {
+               let f = p5.Vector.div(force, this.mass);
+               this.vel.add(f);
+               this.pos.add(this.vel);
+            }
+
+            display(starting) {
+               const adjusted = starting.copy().sub(this.pos);
+               const zoom = 1;
+               ellipse(adjusted.x / zoom + width / 2, adjusted.y / zoom + height / 2, this.mass * 10, this.mass * 10);
+            }
+         }
+
+         function setup() {
+            const rangeInput = document.getElementById('velocity');
+            const rangeValue = document.getElementById('rangeValue');
+            const urlParams = new URLSearchParams(window.location.search);
+            const startV = +(urlParams.get('v') ?? 1);
+            rangeInput.value = startV;
+
+            createCanvas(window.innerWidth, window.innerHeight);
+
+            const startDist = 400;
+            const m = 4;
+            const v = startV;
+            bodies.push(new Body(m, startDist / 2, 0));
+            bodies.push(new Body(m, -startDist / 2, 0));
+            bodies[0].vel = createVector(0, v);
+            bodies[1].vel = createVector(0, -v);
+            rChart = setupChart('chartA', 'Distance', totalR);
+            vChart = setupChart('chartB', 'Velocity', totalV);
+            rChart.data.datasets[0].data = totalR;
+            vChart.data.datasets[0].data = totalV;
+
+            // Update the display value when the range input changes
+            rangeInput.addEventListener('input', function () {
+               rangeValue.textContent = rangeInput.value;
+            });
+            rangeValue.textContent = rangeInput.value;
+         }
+
+         function reload() {
+            const value = document.getElementById('velocity').value;
+            const queryParams = new URLSearchParams(window.location.search);
+            queryParams.set('v', value);
+            const newUrl = window.location.pathname + '?' + queryParams.toString();
+            window.location.href = newUrl;
+         }
+
+         function setupChart(id, name, dataSet) {
+            let ctx = document.getElementById(id).getContext('2d');
+            return new Chart(ctx, {
+               type: 'line',
+               data: {
+                  labels: [],
+                  datasets: [
+                     {
+                        label: name,
+                        data: dataSet,
+                     },
+                  ],
+               },
+               options: {
+                  animation: false,
+                  transitions: false,
+                  responsive: true,
+                  scales: {
+                     x: {
+                        type: 'linear',
+                        position: 'bottom',
+                     },
+                     y: {
+                        type: 'linear',
+                        position: 'left',
+                        min: 0,
+                     },
+                  },
+               },
+            });
+         }
+
+         function draw() {
+            if (stop) return;
+            //background(255);
+            step++;
+            recalculateAll();
+            redrawAll();
+         }
+
+         function recalculateAll() {
+            bodies.forEach((body) => {
+               let force = createVector(0, 0);
+               bodies.forEach((otherBody) => {
+                  if (body === otherBody) return;
+                  let r = p5.Vector.sub(otherBody.pos, body.pos);
+                  let strength = (G * body.mass * otherBody.mass) / r.magSq();
+                  let forceToAdd = r.copy().setMag(strength);
+                  force.add(forceToAdd);
+               });
+
+               body.applyForce(force);
+               force.x = round(force.x);
+               force.y = round(force.y);
+            });
+         }
+
+         function redrawAll() {
+            let center = createVector(0, 0);
+            bodies.forEach((x) => center.add(x.pos.copy().div(2)));
+            //center = bodies[0].pos;
+            bodies.forEach((x) => x.display(center));
+
+            const dist = p5.Vector.sub(bodies[0].pos, bodies[1].pos).mag();
+            const sumV = bodies[0].vel.mag() + bodies[1].vel.mag();
+            if (dist < 20 || dist > 2000) {
+               console.log('Total steps', step);
+               stop = true;
+            }
+
+            //if (totalR.length > 100) totalR.shift();
+            // Update the chart
+            totalR.push(dist);
+            totalV.push(sumV);
+            rChart.data.labels = Array.from(Array(totalR.length).keys());
+            vChart.data.labels = rChart.data.labels;
+
+            rChart.update();
+            vChart.update();
+         }
+      </script>
+   </body>
+</html>
